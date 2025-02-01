@@ -4,11 +4,12 @@ app.py
 
 import os
 import requests
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QListWidget
-from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QListWidget, QHBoxLayout, QFileDialog
+from PyQt5.QtCore import Qt, QSettings
 
 from src.thread.download import DownloadThread
 from src.utils.datetime import DateTime
+from src.thread.unzip import UnzipThread
 
 
 class FlutterVersionSwitcher(QWidget):
@@ -16,13 +17,18 @@ class FlutterVersionSwitcher(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.settings = QSettings("FVS", "FlutterVersionSwitcher")
+        self.download_path = self.settings.value("download_dir", None)
+        if not self.download_path:
+            self.download_path = os.path.expanduser("~/Downloads/flutter_sdk/")
+            self.settings.setValue("download_dir", self.download_path)
+
         self.flutter_sdk_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json"
-        self.download_path = os.path.expanduser("~/Downloads/flutter_sdk/")
 
-        self.init_ui()
-        self.loadFlutterSDKs()
+        self._init_ui()
+        self._fetch_flutter_sdks()
 
-    def init_ui(self):
+    def _init_ui(self) -> None:
         """initialize the ui"""
         self.setWindowTitle("Flutter Version Switcher")
         self.setGeometry(100, 100, 800, 400)
@@ -33,15 +39,17 @@ class FlutterVersionSwitcher(QWidget):
         self.layout.addWidget(self.label)
 
         self.channel_list = QListWidget()
+        self.channel_list.setFixedHeight(80)
         self.channel_list.itemSelectionChanged.connect(
-            self.filterVersionsByChannel)
+            self._filter_versions_by_channel)
         self.layout.addWidget(self.channel_list)
 
-        self.version_label = QLabel("Available Flutter SDK Versions:")
+        self.version_label = QLabel("SDK Versions:")
         self.layout.addWidget(self.version_label)
 
         self.table = QTableWidget()
         self.table.setColumnCount(5)
+        self.table.setMinimumHeight(150)
         self.table.horizontalHeader().setFixedHeight(30)
         self.table.setHorizontalHeaderLabels(
             ["Version", "Dart Sdk Version", "Dart Sdk Arch", "Release Date", "Status"])
@@ -50,18 +58,30 @@ class FlutterVersionSwitcher(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.layout.addWidget(self.table)
 
-        self.download_btn = QPushButton("Download Selected")
-        self.download_btn.clicked.connect(self.downloadSelected)
-        self.layout.addWidget(self.download_btn)
+        btns_group = QHBoxLayout()
+
+        self.download_path_btn = QPushButton("Change Download Path")
+        self.download_path_btn.clicked.connect(self._on_change_download_path)
+        btns_group.addWidget(self.download_path_btn)
+
+        self.set_default_btn = QPushButton("Set Default")
+        self.set_default_btn.clicked.connect(self._on_set_default)
+        btns_group.addWidget(self.set_default_btn)
+
+        self.download_btn = QPushButton("Download")
+        self.download_btn.clicked.connect(self._download_selected)
+        btns_group.addWidget(self.download_btn)
+
+        self.layout.addLayout(btns_group)
 
         self.status_label = QLabel("")
         self.layout.addWidget(self.status_label)
 
         self.setLayout(self.layout)
 
-    def loadFlutterSDKs(self):
+    def _fetch_flutter_sdks(self) -> None:
         """fetch the sdk data from googleapis"""
-        response = requests.get(self.flutter_sdk_url)
+        response = requests.get(self.flutter_sdk_url, timeout=10)
         if response.status_code == 200:
             data = response.json()
             self.releases = data.get("releases", [])
@@ -75,7 +95,7 @@ class FlutterVersionSwitcher(QWidget):
         else:
             self.status_label.setText("Failed to fetch SDK versions")
 
-    def filterVersionsByChannel(self):
+    def _filter_versions_by_channel(self) -> None:
         """filter the version by channel"""
         self.table.setRowCount(0)
         selected_channel = self.channel_list.currentItem()
@@ -89,17 +109,17 @@ class FlutterVersionSwitcher(QWidget):
                     dsv = release.get("dart_sdk_version", "")
                     dsa = release.get("dart_sdk_arch", "")
                     rd = DateTime().to_local(release.get("release_date", ""))
-                    download_status = "Downloaded" if self.isDownloaded(
-                        v) else "Not Downloaded"
+                    s = "Downloaded" if self._is_downloaded(
+                        v, dsa) else "Not Downloaded"
 
                     row_position = self.table.rowCount()
                     self.table.insertRow(row_position)
 
-                    # Insert items into the table
                     self.table.setItem(row_position, 0, QTableWidgetItem(v))
                     self.table.setItem(row_position, 1, QTableWidgetItem(dsv))
                     self.table.setItem(row_position, 2, QTableWidgetItem(dsa))
                     self.table.setItem(row_position, 3, QTableWidgetItem(rd))
+                    self.table.setItem(row_position, 4, QTableWidgetItem(s))
 
         self.table.resizeColumnsToContents()
 
@@ -114,38 +134,62 @@ class FlutterVersionSwitcher(QWidget):
             row_header.setDefaultAlignment(Qt.AlignmentFlag.AlignHCenter)
             row_header.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
 
-    def isDownloaded(self, version):
+    def _is_downloaded(self, v: str, arch: str) -> bool:
         """verify the version is downloaded or not"""
-        file_path = os.path.join(self.download_path, f"flutter_{version}.zip")
+        file_path = os.path.join(self.download_path, f"flutter_{v}_{arch}")
         return os.path.exists(file_path)
 
-    def downloadSelected(self):
+    def _on_download_completed(self, msg: str, fp: str, v: str, arch: str) -> None:
+        """on download complete"""
+        self.status_label.setText(msg)
+        if msg == 'Download Completed':
+            self.unzip_thread = UnzipThread(fp, v, arch)
+            self.unzip_thread.progress.connect(self.status_label.setText)
+            self.unzip_thread.completed.connect(self._on_download_completed)
+            self.unzip_thread.start()
+        if msg == 'Unzipping Completed':
+            self._filter_versions_by_channel()
+
+    def _on_change_download_path(self) -> None:
+        """on change the download location of sdks"""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Directory", "")
+        if directory:
+            self.settings.setValue("download_dir", f"{directory}/")
+            self.download_path = directory
+
+    def _on_set_default(self) -> None:
+        """on set the selected version to default"""
+        selected_row = self.table.currentRow()
+        if selected_row != 0:
+            self.status_label.setText(
+                "Select a version before set to default.")
+        else:
+            self.status_label.setText("")
+
+    def _download_selected(self) -> None:
         """download the selected version"""
         selected_row = self.table.currentRow()
         if selected_row >= 0:
-            version = self.table.item(selected_row, 0).text()
-            if self.isDownloaded(version):
+            v = self.table.item(selected_row, 0).text()
+            arch = self.table.item(selected_row, 2).text()
+            if self._is_downloaded(v, arch):
                 self.status_label.setText("Version already downloaded.")
                 return
 
             for release in self.releases:
-                if release["version"] == version:
+                if release["version"] == v:
                     url = release["archive"]
                     full_url = f"https://storage.googleapis.com/flutter_infra_release/releases/{
                         url}"
                     file_path = os.path.join(
-                        self.download_path, f"flutter_{version}.zip")
+                        self.download_path, f"flutter_{v}_{arch}.zip")
 
-                    self.downloadThread = DownloadThread(
-                        full_url, file_path, version)
-                    self.downloadThread.progress.connect(
+                    self.download_thread = DownloadThread(
+                        full_url, file_path, v, arch)
+                    self.download_thread.progress.connect(
                         self.status_label.setText)
-                    self.downloadThread.completed.connect(
-                        self.downloadCompleted)
-                    self.downloadThread.start()
+                    self.download_thread.completed.connect(
+                        self._on_download_completed)
+                    self.download_thread.start()
                     break
-
-    def downloadCompleted(self, message):
-        """on download complete"""
-        self.status_label.setText(message)
-        self.filterVersionsByChannel()  # Refresh the table to show updated status

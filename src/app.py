@@ -3,6 +3,7 @@ app.py
 """
 
 import os
+import subprocess
 import requests
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QListWidget, QHBoxLayout, QFileDialog
 from PyQt5.QtCore import Qt, QSettings
@@ -166,6 +167,60 @@ class FlutterVersionSwitcher(QWidget):
                 "Select a version before set to default.")
         else:
             self.status_label.setText("")
+
+            if selected_row >= 0:
+                v = self.table.item(selected_row, 0).text()
+                arch = self.table.item(selected_row, 2).text()
+                flutter_path = os.path.join(
+                        self.download_path, f"flutter_{v}_{arch}/flutter/bin")
+                print(flutter_path)
+                if self._is_downloaded(v, arch):
+                    home_dir = os.path.expanduser("~")
+
+                #     shell = os.environ.get("SHELL", "").lower()
+                #     if "zsh" in shell:
+                #         profile_file = ".zshrc"
+                #     else:
+                #         profile_file = ".bash_profile"
+
+                #     flutter_path_line = f'\n# Add Flutter to PATH\nexport PATH="{
+                #         flutter_path}/bin:$PATH"\n'
+                #     profile_file_path = os.path.join(home_dir, profile_file)
+
+                #     try:
+                #         with open(profile_file_path, "a", encoding="utf-8") as profile_file_obj:
+                #             profile_file_obj.write(flutter_path_line)
+                #         print(f"Flutter path added to {
+                #               profile_file_path}. Please restart your terminal or run 'source {profile_file_path}'")
+                #     except (OSError, IOError) as e:
+                #         print(f"Error updating {profile_file}: {e}")
+                # Determine the profile file to update based on the shell
+                    shell = os.environ.get("SHELL", "").lower()
+                    if "zsh" in shell:
+                        profile_file = ".zshrc"
+                    else:
+                        profile_file = ".bash_profile"
+
+                    # Define the line to add to the profile file
+                    flutter_path_line = f'\n# Add Flutter to PATH\nexport PATH="{flutter_path}/bin:$PATH"\n'
+
+                    # Full path to the profile file
+                    profile_file_path = os.path.join(home_dir, profile_file)
+
+                    # Use subprocess to append the flutter path to the profile file
+                    try:
+                        # First, we append the path to the profile file
+                        subprocess.run(['echo', flutter_path_line, '>>', profile_file_path], check=True)
+
+                        # After updating the profile, we need to source it to apply the changes
+                        subprocess.run(['source', profile_file_path], shell=True, check=True)
+
+                        print(f"Flutter path added to {profile_file_path}. Please restart your terminal or run 'source {profile_file_path}' to apply the changes.")
+                    
+                    except subprocess.CalledProcessError as e:
+                        print(f"Error updating {profile_file}: {e}")
+                else:
+                    self.status_label.setText("Flutter sdk not found.")
 
     def _download_selected(self) -> None:
         """download the selected version"""

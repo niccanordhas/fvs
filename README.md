@@ -68,7 +68,7 @@ source ~/.zshrc   # For Zsh users
 ---
 
 ## **📜 License**  
-This project is licensed under the **MIT License**.
+The MIT License (MIT). Please see [License File](https://github.com/niccanordhas/fvs/blob/main/LICENSE.md) for more information.
 
 ---
 
@@ -83,7 +83,7 @@ Want to improve **FVS**? Contributions are welcome! 🎉
 ---
 
 ## **👨‍💻 Author**  
-**[Your Name]** – [Your GitHub](https://github.com/your-username)  
+**[Your Name]** – [Niccanordhas](https://github.com/niccanordhas)  
 
 ---
 

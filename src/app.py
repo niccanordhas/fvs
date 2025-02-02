@@ -3,6 +3,8 @@ app.py
 """
 
 import os
+import re
+import stat
 import subprocess
 import requests
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QListWidget, QHBoxLayout, QFileDialog
@@ -172,36 +174,82 @@ class FlutterVersionSwitcher(QWidget):
                 v = self.table.item(selected_row, 0).text()
                 arch = self.table.item(selected_row, 2).text()
                 flutter_path = os.path.join(
-                        self.download_path, f"flutter_{v}_{arch}/flutter")
-                
+                    self.download_path, f"flutter_{v}_{arch}/flutter")
+
+                # change permissions
+                for root, _, files in os.walk(flutter_path):
+                    for filename in files:
+                        file_path = os.path.join(root, filename)
+                        st = os.stat(file_path)
+                        os.chmod(file_path, st.st_mode | stat.S_IXUSR |
+                                 stat.S_IXGRP | stat.S_IXOTH)
+
                 if self._is_downloaded(v, arch):
                     home_dir = os.path.expanduser("~")
 
-                    shell = os.environ.get("SHELL", "").lower()
-                    if "zsh" in shell:
-                        profile_file = ".zshrc"
+                    # alias entry
+                    alias_entry = f"alias flutter='{
+                        flutter_path}/bin/flutter'\n"
+
+                    # home directory
+                    home_dir = os.path.expanduser("~")
+                    bash_aliases_path = os.path.join(home_dir, ".bash_aliases")
+
+                    # if alias already exists before appending
+                    if os.path.exists(bash_aliases_path):
+                        with open(bash_aliases_path, "r", encoding="utf-8") as f:
+                            lines = f.readlines()
+
+                        # remove existing flutter aliases
+                        filtered_lines = [line for line in lines if not re.match(
+                            r"^alias flutter", line.strip())]
+
+                        # new alias
+                        filtered_lines.append(alias_entry)
+
+                        with open(bash_aliases_path, "w", encoding="utf-8") as f:
+                            f.writelines(filtered_lines)
+
+                        self.status_label.setText(
+                            f"Updated {bash_aliases_path} with the new Flutter alias.")
                     else:
-                        profile_file = ".bash_profile"
+                        with open(bash_aliases_path, "w", encoding="utf-8") as f:
+                            f.write(alias_entry)
+                        self.status_label.setText(
+                            f"Created {bash_aliases_path} and added alias.")
 
-                    flutter_path = flutter_path.rstrip("/bin")
-                    flutter_path_line = f'\n# Add Flutter to PATH\nexport PATH="$PATH{flutter_path}/bin:$PATH"\n'
-                    profile_file_path = os.path.join(home_dir, profile_file)
+                    # determine the shell configuration file
+                    shell = os.environ.get("SHELL", "")
+                    if "zsh" in shell:
+                        shell_rc_path = os.path.join(home_dir, ".zshrc")
+                    else:
+                        shell_rc_path = os.path.join(home_dir, ".bashrc")
 
-                    try:
-                        with open(profile_file_path, "r", encoding="utf-8") as file:
-                            existing_content = file.read()
+                    # shell config file sources .bash_aliases
+                    bash_aliases_source = "\nif [ -f ~/.bash_aliases ]; then\n  . ~/.bash_aliases\nfi\n"
 
-                        if flutter_path_line.strip() not in existing_content.strip():
-                            with open(profile_file_path, "a", encoding="utf-8") as file:
-                                file.write(flutter_path_line)
-                            print(f"Flutter path added to {profile_file_path}. Please run the following command to apply changes:")
-                            print(f"source {profile_file_path}")
-                            print("Alternatively, you can restart your terminal session to apply the changes.")
+                    # if the source line is already present
+                    if os.path.exists(shell_rc_path):
+                        with open(shell_rc_path, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        if bash_aliases_source.strip() not in content:
+                            with open(shell_rc_path, "a", encoding="utf-8") as f:
+                                f.write(bash_aliases_source)
+                            self.status_label.setText(
+                                f"Updated {shell_rc_path} to source .bash_aliases")
                         else:
-                            print("Flutter path is already added in the profile file.")
+                            self.status_label.setText(
+                                f"{shell_rc_path} already sources .bash_aliases")
+                    else:
+                        with open(shell_rc_path, "w", encoding="utf-8") as f:
+                            f.write(bash_aliases_source)
+                        self.status_label.setText(
+                            f"Created {shell_rc_path} and added sourcing for .bash_aliases")
 
-                    except subprocess.CalledProcessError as e:
-                        print(f"Error updating {profile_file}: {e}")
+                    os.system(f"source {shell_rc_path}")
+                    self.status_label.setText(
+                        "Shell configuration updated. Restart your terminal or run 'source ~/.bashrc' or 'source ~/.zshrc' to apply changes.")
+
                 else:
                     self.status_label.setText("Flutter sdk not found.")
 

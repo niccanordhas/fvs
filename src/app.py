@@ -5,7 +5,6 @@ app.py
 import os
 import re
 import stat
-import subprocess
 import requests
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QListWidget, QHBoxLayout, QFileDialog
 from PyQt5.QtCore import Qt, QSettings
@@ -164,7 +163,7 @@ class FlutterVersionSwitcher(QWidget):
     def _on_set_default(self) -> None:
         """on set the selected version to default"""
         selected_row = self.table.currentRow()
-        if selected_row != 0:
+        if selected_row < 0:
             self.status_label.setText(
                 "Select a version before set to default.")
         else:

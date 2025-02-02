@@ -48,10 +48,10 @@ This will launch the **GUI**, where you can manage your Flutter SDK versions vis
 ---
 
 ## **📸 Screenshots**  
-![App Screenshot](images/Screenshot 2025-02-02 at 2.00.54 PM.png)
-![App Screenshot](images/Screenshot 2025-02-02 at 2.03.02 PM.png)
-![App Screenshot](images/Screenshot 2025-02-02 at 2.03.51 PM.png)
-![App Screenshot](images/Screenshot 2025-02-02 at 2.04.11 PM.png)
+![App Screenshot](docs/Screenshot 2025-02-02 at 2.00.54 PM.png)
+![App Screenshot](docs/Screenshot 2025-02-02 at 2.03.02 PM.png)
+![App Screenshot](docs/Screenshot 2025-02-02 at 2.03.51 PM.png)
+![App Screenshot](docs/Screenshot 2025-02-02 at 2.04.11 PM.png)
 
 ---
 

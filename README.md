@@ -83,7 +83,7 @@ Want to improve **FVS**? Contributions are welcome! 🎉
 ---
 
 ## **👨‍💻 Author**  
-**[Your Name]** – [Niccanordhas](https://github.com/niccanordhas)  
+**[Niccanordhas]** – [Profile](https://github.com/niccanordhas)  
 
 ---
 

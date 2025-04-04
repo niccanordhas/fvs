@@ -2,6 +2,6 @@
   "ignore": ["*.pyc", "__pycache__", "*.pyo", "*.pyd"],
   "ext": "py",
   "execMap": {
-    "": "python -u main.py"
+    "": "python3 -u main.py"
   }
 }
